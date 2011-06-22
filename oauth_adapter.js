@@ -70,11 +70,6 @@ Ti.include('lib/oauth.js');
 // create an OAuthAdapter instance
 var OAuthAdapter = function(pConsumerSecret, pConsumerKey, pSignatureMethod)
  {
-	
-	Ti.API.info('*********************************************');
-	Ti.API.info('If you like the OAuth Adapter, consider donating at');
-	Ti.API.info('https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=T5HUU4J5EQTJU&lc=IT&item_name=OAuth%20Adapter&currency_code=USD&bn=PP%2dDonationsBF%3abtn_donate_LG%2egif%3aNonHosted');
-	Ti.API.info('*********************************************');	
 
     // will hold the consumer secret and consumer key as provided by the caller
     var consumerSecret = pConsumerSecret;
@@ -160,6 +155,7 @@ var OAuthAdapter = function(pConsumerSecret, pConsumerKey, pSignatureMethod)
             ,
             parameters: []
         };
+        message.parameters.push(['oauth_callback', 'oob']); // send out-of-band callback
         message.parameters.push(['oauth_consumer_key', consumerKey]);
         message.parameters.push(['oauth_signature_method', signatureMethod]);
         return message;
@@ -169,6 +165,25 @@ var OAuthAdapter = function(pConsumerSecret, pConsumerKey, pSignatureMethod)
     this.getPin = function() {
         return pin;
     };
+    
+    this.doAuthorize = function(pUrl)
+    {
+    	var client = Ti.Network.createHTTPClient();
+    	client.open('GET', pUrl + '?oauth_token=' + requestToken, false);
+    	client.send();
+    	
+    	var ps = {
+    		'oauth_token' : requestToken,
+    		'authorize_access': '1'
+    	}
+    	client.open('POST', pUrl, false); // now query again to authorize
+    	client.send(ps);
+    	
+    	var result = JSON.parse(client.responseText);
+    	pin = result.oauth_verifier;
+ 
+    	return client.responseText;
+    }
 
     // requests a requet token with the given Url
     this.getRequestToken = function(pUrl)
@@ -181,7 +196,9 @@ var OAuthAdapter = function(pConsumerSecret, pConsumerKey, pSignatureMethod)
 
         var client = Ti.Network.createHTTPClient();
         client.open('POST', pUrl, false);
-        client.send(OAuth.getParameterMap(message.parameters));
+        
+        var pMap = OAuth.getParameterMap(message.parameters);
+        client.send(pMap);
 
         var responseParams = OAuth.getParameterMap(client.responseText);
         requestToken = responseParams['oauth_token'];
@@ -253,7 +270,7 @@ var OAuthAdapter = function(pConsumerSecret, pConsumerKey, pSignatureMethod)
         xmlDocument = null;
 
     };
-
+    
     // shows the authorization UI
     this.showAuthorizeUI = function(pUrl, pReceivePinCallback)
     {
